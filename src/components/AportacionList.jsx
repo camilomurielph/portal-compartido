@@ -10,17 +10,46 @@ const AportacionList = ({ aportaciones, desbloqueado, loading, onRefresh }) => {
   const propias = aportaciones.filter((a) => a.autor_id === user.id);
   const otras = aportaciones.filter((a) => a.autor_id !== user.id);
 
+  // Email del usuario de pruebas (puede eliminar cartas aunque estén en lecturas)
+  const USER_PRUEBA = "camilomuriel.kam@gmail.com";
+
   const handleDelete = async (id) => {
-    if (window.confirm("¿Estás seguro de que quieres eliminar esta carta?")) {
-      const { error } = await supabase
-        .from("aportaciones")
-        .delete()
-        .eq("id", id);
-      if (error) {
-        alert("Error al eliminar: " + error.message);
-      } else {
-        if (onRefresh) onRefresh();
-      }
+    // Verificar si la carta ya fue recibida (existe en lecturas)
+    const { data: lecturas, error: lecturasError } = await supabase
+      .from("lecturas")
+      .select("id")
+      .eq("carta_id", id)
+      .maybeSingle();
+
+    if (lecturasError) {
+      alert(
+        "Error al verificar si la carta fue recibida: " + lecturasError.message,
+      );
+      return;
+    }
+
+    // Si la carta está en lecturas y el usuario NO es el de pruebas, mostrar mensaje
+    if (lecturas && user?.email !== USER_PRUEBA) {
+      alert(
+        "📮 No puedes borrar una carta que ya fue recibida por tu compañero.",
+      );
+      return;
+    }
+
+    // Confirmar eliminación (solo si es el usuario de prueba o no está en lecturas)
+    const mensajeConfirmacion =
+      user?.email === USER_PRUEBA
+        ? "⚠️ Esta carta ya fue recibida, pero como eres usuario de pruebas, puedes eliminarla. ¿Continuar?"
+        : "¿Estás seguro de que quieres eliminar esta carta?";
+
+    if (!window.confirm(mensajeConfirmacion)) return;
+
+    const { error } = await supabase.from("aportaciones").delete().eq("id", id);
+
+    if (error) {
+      alert("Error al eliminar: " + error.message);
+    } else {
+      if (onRefresh) onRefresh();
     }
   };
 
@@ -45,7 +74,6 @@ const AportacionList = ({ aportaciones, desbloqueado, loading, onRefresh }) => {
   const renderAportacion = (aportacion, esPropia) => {
     const esEdicion = editandoId === aportacion.id;
 
-    // Obtener nombre del perfil si existe, sino "Compañero"
     const nombreRemitente = esPropia
       ? "Tú"
       : aportacion.profiles?.username || "Compañero";
