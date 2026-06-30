@@ -10,10 +10,11 @@ const AportacionList = ({ aportaciones, desbloqueado, loading, onRefresh }) => {
   const propias = aportaciones.filter((a) => a.autor_id === user.id);
   const otras = aportaciones.filter((a) => a.autor_id !== user.id);
 
-  // Email del usuario de pruebas (puede eliminar cartas aunque estén en lecturas)
+  // Email del usuario de pruebas (puede eliminar cualquier carta, incluso recibidas)
   const USER_PRUEBA = "camilomuriel.kam@gmail.com";
+  const esUsuarioPrueba = user?.email === USER_PRUEBA;
 
-  const handleDelete = async (id) => {
+  const handleDelete = async (id, esPropia) => {
     // Verificar si la carta ya fue recibida (existe en lecturas)
     const { data: lecturas, error: lecturasError } = await supabase
       .from("lecturas")
@@ -29,20 +30,24 @@ const AportacionList = ({ aportaciones, desbloqueado, loading, onRefresh }) => {
     }
 
     // Si la carta está en lecturas y el usuario NO es el de pruebas, mostrar mensaje
-    if (lecturas && user?.email !== USER_PRUEBA) {
+    if (lecturas && !esUsuarioPrueba) {
       alert(
         "📮 No puedes borrar una carta que ya fue recibida por tu compañero.",
       );
       return;
     }
 
-    // Confirmar eliminación (solo si es el usuario de prueba o no está en lecturas)
-    const mensajeConfirmacion =
-      user?.email === USER_PRUEBA
-        ? "⚠️ Esta carta ya fue recibida, pero como eres usuario de pruebas, puedes eliminarla. ¿Continuar?"
-        : "¿Estás seguro de que quieres eliminar esta carta?";
+    // Mensaje de confirmación personalizado
+    let mensaje = "¿Estás seguro de que quieres eliminar esta carta?";
+    if (esUsuarioPrueba && !esPropia) {
+      mensaje =
+        "⚠️ Vas a eliminar una carta que te envió tu compañero. ¿Continuar?";
+    } else if (esUsuarioPrueba && esPropia && lecturas) {
+      mensaje =
+        "⚠️ Esta carta ya fue recibida, pero como eres usuario de pruebas, puedes eliminarla. ¿Continuar?";
+    }
 
-    if (!window.confirm(mensajeConfirmacion)) return;
+    if (!window.confirm(mensaje)) return;
 
     const { error } = await supabase.from("aportaciones").delete().eq("id", id);
 
@@ -73,10 +78,14 @@ const AportacionList = ({ aportaciones, desbloqueado, loading, onRefresh }) => {
 
   const renderAportacion = (aportacion, esPropia) => {
     const esEdicion = editandoId === aportacion.id;
-
     const nombreRemitente = esPropia
       ? "Tú"
       : aportacion.profiles?.username || "Compañero";
+
+    // Mostrar botones de acción solo si:
+    // - Es propia (siempre)
+    // - O es del otro y el usuario actual es el de pruebas (solo eliminar)
+    const mostrarAcciones = esPropia || (esUsuarioPrueba && !esPropia);
 
     return (
       <div
@@ -98,25 +107,25 @@ const AportacionList = ({ aportaciones, desbloqueado, loading, onRefresh }) => {
                   year: "numeric",
                 })}
               </span>
-              {esPropia && (
+              {mostrarAcciones && (
                 <div className="flex gap-1 ml-auto">
+                  {esPropia && !esEdicion && (
+                    <button
+                      onClick={() => handleEdit(aportacion)}
+                      className="text-xs text-marronClaro hover:text-terracotaIntenso px-1"
+                      title="Editar"
+                    >
+                      ✏️
+                    </button>
+                  )}
                   {!esEdicion && (
-                    <>
-                      <button
-                        onClick={() => handleEdit(aportacion)}
-                        className="text-xs text-marronClaro hover:text-terracotaIntenso px-1"
-                        title="Editar"
-                      >
-                        ✏️
-                      </button>
-                      <button
-                        onClick={() => handleDelete(aportacion.id)}
-                        className="text-xs text-marronClaro hover:text-red-500 px-1"
-                        title="Eliminar"
-                      >
-                        🗑️
-                      </button>
-                    </>
+                    <button
+                      onClick={() => handleDelete(aportacion.id, esPropia)}
+                      className="text-xs text-marronClaro hover:text-red-500 px-1"
+                      title={esPropia ? "Eliminar" : "Eliminar (modo pruebas)"}
+                    >
+                      🗑️
+                    </button>
                   )}
                 </div>
               )}
